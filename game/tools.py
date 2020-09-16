@@ -1,3 +1,7 @@
+DEBUG_LEVEL = 2
+
+
+
 import pygame as pg
 def check_mouseover(rect):
     mos_x, mos_y = pg.mouse.get_pos()
@@ -6,8 +10,8 @@ def check_mouseover(rect):
     else:
         return False
 
-def debug_msg(msg,lvl,global_lvl):
-    if global_lvl >= lvl:
+def debug_msg(msg,lvl):
+    if DEBUG_LEVEL >= lvl:
         print(msg)
 
 def filter_list(targets,search):
@@ -30,3 +34,12 @@ def adjust_hsla(in_color,hsla_delta):
             out_color.append(out)
         return tuple(out_color)
         
+    
+def color_from_hsla(h,s,l,a):
+    color = pg.Color(0)
+    color.hsla = h,s,l,a
+    return color
+
+def color_to_hsla(r,g,b,a=255):
+    return pg.Color(r,g,b,a).hsla 
+    
