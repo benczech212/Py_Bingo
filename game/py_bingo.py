@@ -113,6 +113,7 @@ class Game:
         self.col_num_range = self.col_num_max - self.col_num_min + 1
         self.balls = shuffle_balls(self.col_num_min,self.col_num_max * self.col_count )
         self.current_ball_id = 0
+        self.bingo_score_val = 100
         self.game_over = False
         self.ball_history_display = Ball_History_Display()
         self.events = Game_Events()
@@ -154,6 +155,18 @@ class Game:
                     card.tick(ball)
                 except:
                     print("Error, fix this")
+    def player_bingo(self, player, bingo_count):
+        if bingo_count == 1:
+            # Single Bingo
+            pass
+        else:
+            # Mult bingo
+            pass
+
+        
+        score_multiplier = (bingo_count)
+        player.score += (self.bingo_score_val * bingo_count) * score_multiplier
+
 class Card_Deck:
     img = ASSETS.img_card_deck
     def __init__(self,player):
@@ -163,7 +176,7 @@ class Card_Deck:
         self.pos = (100,300)
         self.rect = pg.Rect(self.pos,self.size)
         self.surf = pg.Surface(self.img.get_size())
-        self.card_size = (600,400)
+        self.card_size = (300,400)
         self.card_margins = (50,50)
         self.card_deck_rect = pg.Rect(self.pos,self.size)
         
@@ -173,12 +186,15 @@ class Card_Deck:
             card.draw()
 
     def give_card(self):
-        self.cards.append(Card())
+        self.cards.append(Card(self.player))
         self.arrange_cards()
 
     def arrange_cards(self):
         for i, card in enumerate(self.cards):
-            card.pos = (i * self.card_size[0],self.card_size[1])
+            x = (self.card_margins[0]//2) + (i * (self.card_size[0] + self.card_margins[0]//2)) + self.pos[0]
+            y = (self.card_margins[1]//2) + self.pos[1]
+            card.pos = (x,y)
+            card.populate_cells()
     
 
 class Player:
@@ -217,50 +233,60 @@ class Ball:
 
 
 class Cell:
-    def __init__(self, card, pos, txt, unit_pos, bg_color, is_clickable):
+    def __init__(self, card, pos, num, unit_pos, bg_color, is_clickable):
         self.card = card
         pos_x = self.card.pos[0] + (unit_pos[0] * card.cell_size[0])
         pos_y = self.card.pos[1] + (unit_pos[1] * card.cell_size[1])
         self.pos = (pos_x,pos_y)
         self.unit_pos = unit_pos
         self.size = self.card.cell_size
-        self.txt = txt
+        self.num = num
         self.is_daubed = False
+        self.near_bingo = False
         self.rect = pg.Rect(self.pos,self.size)
-        self.bg_color = pg.Color(bg_color[0],bg_color[1],bg_color[2])
+        self.bg_color_default = pg.Color(bg_color[0],bg_color[1],bg_color[2])
+        self.bg_color = self.bg_color_default
         self.bg_color_active = pg.Color(64,64,64)
         self.bg_color_daubed = pg.Color(0,0,255)
+        self.bg_color_near_bingo = pg.Color(96,96,96)
         self.border_color = (0,0,0)
         self.text_color = (0,0,0)
         self.text_assist_color = (255,0,0)
         self.text_daubed_color = (255,0,0)
         self.is_clickable = is_clickable
+        self.is_active = False
         
     
     def on_click(self,event):
         if GAME.current_ball_id > 0:
             balls_called = GAME.balls[0:GAME.current_ball_id]
             for ball in balls_called:
-                if ball.num == self.txt:
+                if ball.num == self.num:
                     self.daub()
 
     def daub(self):
         self.is_daubed = True
-        tools.debug_msg("{} is now daubbed".format(self.txt))
+        tools.debug_msg("{} is now daubbed".format(self.num))
+
         
     def draw(self,card_rect):
-        text = "{:^}".format(self.txt)
-        is_active = tools.check_mouseover(self.rect)
+        self.is_active = tools.check_mouseover(self.rect)
+        
         if self.is_daubed:       
             bg_color = self.bg_color_daubed
             text = ""
-        elif self.is_clickable and not self.is_daubed:
-            bg_color = self.bg_color_active
-        elif not self.is_clickable:
-            bg_color = self.bg_color
+        else:
+            text = "{:^}".format(self.num)
+            #if self.is_clickable:
+            if self.near_bingo: bg_color = self.bg_color_near_bingo
+            elif self.is_active: bg_color = self.bg_color_active
+            else: bg_color = self.bg_color
+            
+
+
         
 
-
+        
         # BG
         
         pg.draw.rect(SCREEN.win,bg_color,self.rect, 0)
@@ -268,15 +294,14 @@ class Cell:
         #Border
         pg.draw.rect(SCREEN.win,self.border_color,self.rect, 1)
 
-        #header row
-        
         text_label = FONTS.cell_font.render(text,1,self.text_color)
         text_label_pos = text_label.get_rect(center=(self.rect.center))
         SCREEN.win.blit(text_label,text_label_pos)
     
 class Card:
     count = 0
-    def __init__(self):
+    def __init__(self,player):
+        self.player = player
         self.pos = (0,0)
         self.cell_size = (60,60)
         self.cell_bg_color = (96,96,82)
@@ -285,11 +310,10 @@ class Card:
         self.unit_height = 5
         self.card_size = (self.unit_width * self.cell_size[0], self.unit_height * self.cell_size[1])
         self.nums = []
-        self.daubs = []
         self.generate_nums()
         self.cells = []
         self.header_cells = []
-        self.populate_cells()
+        #self.populate_cells()
         self.assist_mode = False
         self.auto_daub_mode = True
         self.id = self.count
@@ -308,10 +332,11 @@ class Card:
             cell.draw(pg.Rect(self.pos,self.card_size))
         for cell in self.cells:
             cell.draw(pg.Rect(self.pos,self.card_size))
-        pg.draw.rect(SCREEN.win,self.border_color,self.rect, 1)
+        
 
     def populate_cells(self):
         # header row
+        self.cells = []
         for x in range(self.unit_width):
             cell_pos_x = self.pos[0] + (x * self.cell_size[0])                
             cell_pos_y = self.pos[1]
@@ -329,81 +354,116 @@ class Card:
                 num = self.nums[x][y]
                 unit_pos = (x,y)
                 bg_color = (128,128,128)
-                self.cells.append(Cell(self,cell_pos,num,unit_pos,bg_color,False))        
+                self.cells.append(Cell(self,cell_pos,num,unit_pos,bg_color,True))       
+
     def generate_nums(self):
         num_id = 0
         self.nums = []
-        self.daubs = []
         for x in range(self.unit_width):
             self.nums.append([])
-            self.daubs.append([])
             rand_min = ((x + 0) * GAME.col_num_range) + 1 
             rand_max = ((x + 1) * GAME.col_num_range) + 1 
             random_nums = random.sample(range(rand_min,rand_max),self.unit_height)
             for num in random_nums:
                 self.nums[x].append(num)
-                self.daubs[x].append(False)
 
     def auto_daub(self,ball):
         if self.auto_daub_mode:
-            for cell in self.cells:
-                if cell.txt == ball.num and not cell.is_daubed:
+            cell = self.cell_by_num(ball.num)
+            if cell != None:
+                if not cell.is_daubed:
                     cell.is_daubed = True
-        #self.check_bingo()
+        self.check_bingo()
 
     def tick(self, ball):
-        
         self.auto_daub(ball)
         if self.is_shown:
             self.draw()
         
         #self.assist_mode()
-        
+    
+    
+
+
+
     def check_bingo(self):
-        bingo = False
-        check_cols = []
-        check_rows = []
-        check_col_nums = []
-        check_row_nums = []
-        check_diag = []
-        check_diag_nums = []
-        check_diag_inv = []
-        check_diag_inv_nums = []
-        for x in range(self.width):
-            check_cols.append([])
-            check_rows.append([])
-            check_col_nums.append([])
-            check_row_nums.append([])
-        for x in range(self.width):
-            for y in range(self.height):        
-                for cell in self.cells:
-                    if cell.x == x and cell.y == y:
-                        check_cols[y].append(cell.is_dobbed)
-                        check_col_nums[y].append(cell.num)
-                        check_rows[x].append(cell.is_dobbed)
-                        check_row_nums[x].append(cell.num)
-                        #check_rows[y].append(cell.is_dobbed)
-                        if cell.x == cell.y:
-                            check_diag.append(cell.is_dobbed)
-                            check_diag_nums.append(cell.num)
-                        #if 5 - x == y:
-                            #check_diag_inv.append(cell.is_dobbed)
+        daubs = self.get_daubs()
+        bingo_count = 0
+        width = self.unit_width
+        height = self.unit_height
+        checks = [[],[]]
+        x_min = 0
+        x_mid = int(width/2)
+        x_max = width-1
+        y_min = 0
+        y_mid = int(height/2)
+        y_max = height-1
+
+        # row or colunm bingo
+        for x in range(width):
+            for y in range(height):
+                checks[0].append(daubs[x][y])
+                checks[1].append(daubs[y][x])
+            for check in checks:
+                if all(check):
+                    bingo_count += 1
+                elif check.count(False) == 1:
+                    cell = None
+                    if check == checks[0]:
+                        cell = self.cell_by_unitpos((x,y)) 
+                    elif check == checks[1]:
+                        cell = self.cell_by_unitpos((y,x))
+                    if cell != None:
+                        cell.near_bingo = True
                     
-        checks = [check_cols,check_rows]
-        check_nums = [check_col_nums,check_row_nums]
-        check_names = ["Colunm Bingo","Row Bingo"]
-        for check_num, check in enumerate(checks):
-            for group_num, dobbed in enumerate(check):
-                if all(dobbed) and len(dobbed)>0:
-                    check_name = str(checks[check_num])
-                    print("{} at # {}".format(check_names[check_num],group_num))
-                    print(check_nums[check_num][group_num])
-                    bingo = True
+                    
+                #elif check.count(True) > 3:
+                    #x = check.index(False)
+                    #cell = self.cell_by_unitpos[x,y]
+                    #cell.near_bingo = True                  
+            checks = [[],[]]
+
+        # corners and center
+        if daubs[x_min][y_min] and daubs[x_min][y_max] and daubs[x_max][y_min] and daubs[x_max][y_max] and daubs[x_mid][y_mid]:
+            bingo_count += 1
+
+        # diagonal 
+        for i in range(width):
+            j = (width-1)-i
+            checks[0].append(daubs[i][i]) # Normal Diagonal   (0,0), (1,1), (2,2), (3,3), (4,4)
+            checks[1].append(daubs[i][j]) # Inverted Daigonal (0,4), (1,3), (2,2), (3,1), (4,0)
+        for check in checks:
+            if all(check):
+                bingo_count += 1
+        checks = [[],[]]
+        if bingo_count > 0:
+            GAME.player_bingo(self.player,bingo_count)
 
 
+                   
+         
+                
 
-        return bingo
- 
+    def cell_by_unitpos(self,unit_pos):
+        for cell in self.cells:
+            if cell.unit_pos == unit_pos:
+                return cell
+    def cell_by_num(self,num):
+        for cell in self.cells:
+            if cell.num == num:
+                return cell
+
+    def cells_by_isdaubbed(self):    
+        cells = [cell for cell in self.cells if cell.is_daubed]
+        return cells
+
+    def get_daubs(self):
+        daubs = [[False for y in range(self.unit_height)] for x in range(self.unit_width)]
+        for cell in self.cells:
+            daubs[cell.unit_pos[0]][cell.unit_pos[1]] = cell.is_daubed
+        return daubs
+            
+            
 
 class History_Item:
     base_imgs = ASSETS.img_balls
